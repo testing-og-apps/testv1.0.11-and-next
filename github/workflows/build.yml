@@ -1,0 +1,94 @@
+name: Build Flutter APK
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+        cache: true
+
+    - name: Create Android project
+      run: flutter create --org com.zeroex --project-name annua --platforms=android .
+
+    - name: Add native sound helper
+      run: |
+        f=$(find android/app/src/main -name 'MainActivity.kt' | head -1)
+        cp android_native/MainActivity.kt "$f"
+
+    - name: Add notification icon resources
+      run: cp -r android_res/. android/app/src/main/res/
+
+    - name: Patch Android config
+      run: |
+        python3 - <<'EOF'
+        import re, glob
+        m = 'android/app/src/main/AndroidManifest.xml'
+        s = open(m).read()
+        perms = ''.join(f'<uses-permission android:name="android.permission.{p}"/>' for p in
+          ['POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','VIBRATE','WAKE_LOCK','USE_EXACT_ALARM','USE_FULL_SCREEN_INTENT','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'])
+        perms += '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>'
+        perms += '<queries>' + ''.join(f'<intent><action android:name="android.intent.action.VIEW"/><data android:scheme="{x}"/></intent>' for x in ['https','tel','sms']) + '</queries>'
+        recv = '''<receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"><intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+        <action android:name="android.intent.action.QUICKBOOT_POWERON"/></intent-filter></receiver>'''
+        s = s.replace('android:label="annua"', 'android:label="Annua"')
+        s = s.replace('android:name=".MainActivity"', 'android:name=".MainActivity" android:showWhenLocked="true" android:turnScreenOn="true"', 1)
+        s = s.replace('<application', perms + '<application', 1).replace('</application>', recv + '</application>', 1)
+        open(m, 'w').write(s)
+
+        g = glob.glob('android/app/build.gradle*')[0]
+        t = open(g).read()
+
+        t = re.sub(r'compileSdk\w*\s*=?\s*\d+', 'compileSdkVersion 36', t)
+        if 'compileSdkVersion' not in t and 'compileSdk' not in t:
+            t = re.sub(r'android\s*\{', 'android {\n    compileSdkVersion 36', t, 1)
+
+        if g.endswith('.kts'):
+            t = re.sub(r'compileOptions\s*\{', 'compileOptions {\n        isCoreLibraryDesugaringEnabled = true', t, 1)
+            t += '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
+        else:
+            t = re.sub(r'compileOptions\s*\{', 'compileOptions {\n        coreLibraryDesugaringEnabled true', t, 1)
+            t += '\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}\n'
+        open(g, 'w').write(t)
+        EOF
+
+    - name: Relax Kotlin JVM target check
+      run: echo "kotlin.jvm.target.validation.mode=IGNORE" >> android/gradle.properties
+
+    - name: Install dependencies
+      run: flutter pub get
+
+    - name: Generate app icons
+      run: dart run flutter_launcher_icons
+
+    - name: Raise plugin compileSdk to 36
+      run: |
+        find $HOME/.pub-cache/hosted -path '*/android/build.gradle*' -exec sed -i -E 's/(compileSdk(Version)?[[:space:]=]+)[0-9]+/\136/' {} +
+
+    - name: Build APK
+      run: flutter build apk --release
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-apk
+        path: build/app/outputs/flutter-apk/app-release.apk
