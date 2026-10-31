@@ -82,7 +82,9 @@ class AppState extends ChangeNotifier {
     final nav = navKey.currentState;
     if (nav == null) return;
     nav.push(MaterialPageRoute(
-      builder: (_) => ReminderScreen(id: r.eventId, notifId: r.notifId),
+      builder: (_) => r.style == AlertStyle.alarm
+          ? ReminderScreen(id: r.eventId, notifId: r.notifId)
+          : EventDetailScreen(id: r.eventId),
     ));
   }
 

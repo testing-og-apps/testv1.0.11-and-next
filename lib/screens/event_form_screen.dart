@@ -41,11 +41,10 @@ class EventFormScreen extends StatefulWidget {
 class _EventFormScreenState extends State<EventFormScreen> {
   final _key = GlobalKey<FormState>();
   late final TextEditingController _name, _custom, _rel, _cat, _loc, _notes;
-  // Added contact/social links in the order the user added them (key = platform key).
-  final Map<String, TextEditingController> _links = {};
+  // Contact/social entries in the order added; the same platform may appear several times.
+  final List<_LinkRow> _links = [];
   final List<TextEditingController> _trash = []; // removed link fields, disposed with the screen
-  String? _focusKey;
-  final Map<String, Country> _cc = {}; // country for the phone / WhatsApp fields
+  _LinkRow? _focusRow;
   late Country _defaultCountry;
   late EventType _type;
   late Recurrence _rec;
@@ -67,16 +66,13 @@ class _EventFormScreenState extends State<EventFormScreen> {
     _loc = TextEditingController(text: e?.location);
     _notes = TextEditingController(text: e?.notes);
     if (e != null) {
-      for (final k in ['phone', 'whatsapp']) {
-        final v = k == 'phone' ? e.phone : e.whatsapp;
-        if (v.isEmpty) continue;
-        final sp = splitPhone(v, _defaultCountry);
-        _cc[k] = sp.country;
-        _links[k] = TextEditingController(text: sp.national);
-      }
-      for (final p in linkPlatforms) {
-        final v = e.social[p.key];
-        if (v != null && v.isNotEmpty) _links[p.key] = TextEditingController(text: v);
+      for (final l in e.links) {
+        if (l.key == 'phone' || l.key == 'whatsapp') {
+          final sp = splitPhone(l.value, _defaultCountry);
+          _links.add(_LinkRow(l.key, TextEditingController(text: sp.national), sp.country));
+        } else {
+          _links.add(_LinkRow(l.key, TextEditingController(text: l.value), null));
+        }
       }
     }
     _type = e?.type ?? widget.initialType ?? EventType.birthday;
@@ -89,7 +85,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _custom, _rel, _cat, _loc, _notes, ..._links.values, ..._trash]) {
+    for (final c in [_name, _custom, _rel, _cat, _loc, _notes, for (final l in _links) l.ctl, ..._trash]) {
       c.dispose();
     }
     super.dispose();
@@ -122,8 +118,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   }
 
   Future<void> _addLink() async {
-    final available = linkPlatforms.where((p) => !_links.containsKey(p.key)).toList();
-    if (available.isEmpty) return;
+    final available = linkPlatforms; // the same platform can be added more than once
     final p = await showModalBottomSheet<LinkPlatform>(
       context: context,
       isScrollControlled: true,
@@ -160,9 +155,9 @@ class _EventFormScreenState extends State<EventFormScreen> {
     );
     if (p == null) return;
     setState(() {
-      _links[p.key] = TextEditingController();
-      if (p.key == 'phone' || p.key == 'whatsapp') _cc[p.key] = _defaultCountry;
-      _focusKey = p.key;
+      final row = _LinkRow(p.key, TextEditingController(), (p.key == 'phone' || p.key == 'whatsapp') ? _defaultCountry : null);
+      _links.add(row);
+      _focusRow = row;
     });
   }
 
@@ -174,11 +169,12 @@ class _EventFormScreenState extends State<EventFormScreen> {
     var photo = _photo;
     if (_newPhoto != null) photo = await s.storage.savePhoto(File(_newPhoto!), id);
     if (old?.photo != null && old!.photo != photo) await s.storage.deletePhoto(old.photo!);
-    String link(String k) => composePhone(_cc[k] ?? _defaultCountry, _links[k]?.text ?? '');
-    final social = <String, String>{
-      for (final e in _links.entries)
-        if (e.key != 'phone' && e.key != 'whatsapp' && e.value.text.trim().isNotEmpty) e.key: e.value.text.trim(),
-    };
+    final links = <LinkItem>[];
+    for (final l in _links) {
+      final isNumber = l.key == 'phone' || l.key == 'whatsapp';
+      final v = isNumber ? composePhone(l.country ?? _defaultCountry, l.ctl.text) : l.ctl.text.trim();
+      if (v.isNotEmpty) links.add(LinkItem(l.key, v));
+    }
     await s.upsert(AnnuaEvent(
       id: id,
       name: _name.text.trim(),
@@ -190,9 +186,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
       relationship: _rel.text.trim(),
       category: _cat.text.trim(),
       location: _loc.text.trim(),
-      phone: link('phone'),
-      whatsapp: link('whatsapp'),
-      social: social,
+      links: links,
       notes: _notes.text.trim(),
       photo: photo,
       reminders: _reminders,
@@ -224,11 +218,21 @@ class _EventFormScreenState extends State<EventFormScreen> {
                 EventType.anniversary => 'New anniversary',
                 EventType.other => 'New event',
               }),
-        actions: [TextButton(onPressed: _save, child: const Text('Save'))],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
+            onPressed: _save,
+            icon: const Icon(Icons.check_rounded),
+            label: Text(widget.event == null ? 'Save' : 'Save changes'),
+          ),
+        ),
       ),
       body: Form(
         key: _key,
-        child: ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 60), children: [
+        child: ListView(padding: const EdgeInsets.fromLTRB(20, 4, 20, 24), children: [
           Center(
             child: Stack(children: [
               GestureDetector(onTap: _pickPhoto, child: Avatar(name: _name.text, radius: 48, path: photoPath)),
@@ -330,34 +334,35 @@ class _EventFormScreenState extends State<EventFormScreen> {
           const SizedBox(height: 12),
           TextFormField(controller: _loc, decoration: deco(context, 'Location / place', icon: Icons.place_outlined, hint: 'City, venue, address…')),
           _label('Contact & social links'),
-          for (final en in _links.entries)
+          for (final row in _links)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Builder(builder: (context) {
-                final p = platformOf(en.key);
-                final isNumber = en.key == 'phone' || en.key == 'whatsapp';
+                final p = platformOf(row.key);
+                final same = _links.where((l) => l.key == row.key).toList();
+                final label = same.length > 1 ? '${p.label} ${same.indexOf(row) + 1}' : p.label;
+                final isNumber = row.key == 'phone' || row.key == 'whatsapp';
                 void remove() => setState(() {
-                      final c = _links.remove(en.key);
-                      if (c != null) _trash.add(c);
-                      _cc.remove(en.key);
+                      _links.remove(row);
+                      _trash.add(row.ctl);
                     });
                 if (!isNumber) {
                   return TextFormField(
-                    controller: en.value,
-                    autofocus: en.key == _focusKey,
+                    controller: row.ctl,
+                    autofocus: identical(row, _focusRow),
                     keyboardType: p.keyboard,
-                    decoration: deco(context, p.label, hint: p.hint).copyWith(
+                    decoration: deco(context, label, hint: p.hint).copyWith(
                       prefixIcon: Padding(padding: const EdgeInsets.all(14), child: PlatformIcon(p, size: 22)),
                       suffixIcon: IconButton(icon: const Icon(Icons.close_rounded), onPressed: remove),
                     ),
                   );
                 }
-                final country = _cc[en.key] ?? _defaultCountry;
+                final country = row.country ?? _defaultCountry;
                 return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
                     PlatformIcon(p, size: 20),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(p.label, style: const TextStyle(fontWeight: FontWeight.w600))),
+                    Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
                     IconButton(visualDensity: VisualDensity.compact, icon: const Icon(Icons.close_rounded), onPressed: remove),
                   ]),
                   Row(children: [
@@ -367,7 +372,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
                         final c = await showCountryPicker(context, country);
                         if (c == null || !mounted) return;
                         setState(() {
-                          _cc[en.key] = c;
+                          row.country = c;
                           _defaultCountry = c;
                         });
                         context.read<AppState>().setLastCountry(c.iso);
@@ -376,18 +381,17 @@ class _EventFormScreenState extends State<EventFormScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextFormField(
-                        controller: en.value,
-                        autofocus: en.key == _focusKey,
+                        controller: row.ctl,
+                        autofocus: identical(row, _focusRow),
                         keyboardType: TextInputType.phone,
-                        decoration: deco(context, 'Phone number', hint: en.key == 'whatsapp' ? 'WhatsApp number' : 'Number'),
+                        decoration: deco(context, 'Phone number', hint: row.key == 'whatsapp' ? 'WhatsApp number' : 'Number'),
                       ),
                     ),
                   ]),
                 ]);
               }),
             ),
-          if (_links.length < linkPlatforms.length)
-            OutlinedButton.icon(onPressed: _addLink, icon: const Icon(Icons.add_rounded), label: const Text('Add')),
+          OutlinedButton.icon(onPressed: _addLink, icon: const Icon(Icons.add_rounded), label: Text(_links.isEmpty ? 'Add contact or link' : 'Add another')),
           _label('Reminders'),
           for (var i = 0; i < _reminders.length; i++)
             Container(
@@ -579,4 +583,11 @@ class _StyleCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _LinkRow {
+  _LinkRow(this.key, this.ctl, this.country);
+  final String key;
+  final TextEditingController ctl;
+  Country? country; // phone / WhatsApp only
 }

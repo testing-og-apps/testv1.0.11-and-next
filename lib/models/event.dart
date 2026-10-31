@@ -36,6 +36,13 @@ class Reminder {
       );
 }
 
+/// One contact / social entry (a person can have several of the same kind).
+class LinkItem {
+  final String key, value;
+  const LinkItem(this.key, this.value);
+  Map<String, String> toJson() => {'k': key, 'v': value};
+}
+
 class AnnuaEvent {
   final String id;
   String name;
@@ -47,9 +54,7 @@ class AnnuaEvent {
   String relationship;
   String category;
   String location;
-  String phone;
-  String whatsapp;
-  Map<String, String> social;
+  List<LinkItem> links;
   String notes;
   String? photo; // file name inside the app's photos folder
   List<Reminder> reminders;
@@ -65,14 +70,25 @@ class AnnuaEvent {
     this.relationship = '',
     this.category = '',
     this.location = '',
-    this.phone = '',
-    this.whatsapp = '',
-    Map<String, String>? social,
+    List<LinkItem>? links,
     this.notes = '',
     this.photo,
     List<Reminder>? reminders,
-  })  : social = social ?? {},
+  })  : links = links ?? [],
         reminders = reminders ?? [];
+
+  List<String> valuesOf(String key) => [for (final l in links) if (l.key == key && l.value.isNotEmpty) l.value];
+  String get phone => valuesOf('phone').isEmpty ? '' : valuesOf('phone').first;
+  String get whatsapp => valuesOf('whatsapp').isEmpty ? '' : valuesOf('whatsapp').first;
+
+  /// First value per platform (kept in the saved file for older app versions).
+  Map<String, String> get social {
+    final m = <String, String>{};
+    for (final l in links) {
+      if (l.key != 'phone' && l.key != 'whatsapp' && l.value.isNotEmpty) m.putIfAbsent(l.key, () => l.value);
+    }
+    return m;
+  }
 
   String get title => switch (type) {
         EventType.birthday => 'Birthday',
@@ -150,6 +166,7 @@ class AnnuaEvent {
         'phone': phone,
         'whatsapp': whatsapp,
         'social': social,
+        'links': links.map((l) => l.toJson()).toList(),
         'notes': notes,
         'photo': photo,
         'reminders': reminders.map((r) => r.toJson()).toList(),
@@ -166,11 +183,26 @@ class AnnuaEvent {
         relationship: j['relationship'] as String? ?? '',
         category: j['category'] as String? ?? '',
         location: j['location'] as String? ?? '',
-        phone: j['phone'] as String? ?? '',
-        whatsapp: j['whatsapp'] as String? ?? '',
-        social: Map<String, String>.from((j['social'] as Map?) ?? {}),
+        links: _linksFromJson(j),
         notes: j['notes'] as String? ?? '',
         photo: j['photo'] as String?,
         reminders: ((j['reminders'] as List?) ?? []).map((e) => Reminder.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
       );
+}
+
+List<LinkItem> _linksFromJson(Map<String, dynamic> j) {
+  final raw = j['links'];
+  if (raw is List) {
+    return [
+      for (final e in raw)
+        if (e is Map && (e['v'] as String? ?? '').isNotEmpty) LinkItem(e['k'] as String? ?? 'other', e['v'] as String),
+    ];
+  }
+  // files saved by older versions: one phone, one WhatsApp and one value per platform
+  return [
+    if ((j['phone'] as String? ?? '').isNotEmpty) LinkItem('phone', j['phone'] as String),
+    if ((j['whatsapp'] as String? ?? '').isNotEmpty) LinkItem('whatsapp', j['whatsapp'] as String),
+    for (final e in Map<String, dynamic>.from((j['social'] as Map?) ?? {}).entries)
+      if ((e.value as String? ?? '').isNotEmpty) LinkItem(e.key, e.value as String),
+  ];
 }

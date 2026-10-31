@@ -17,7 +17,35 @@ class EventDetailScreen extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     if (e == null) return const Scaffold(body: SizedBox.shrink());
     final d = e.daysUntil();
-    String linkValue(String key) => key == 'whatsapp' ? e.whatsapp : (e.social[key] ?? '');
+    final phones = e.valuesOf('phone');
+    Future<String?> chooseValue(String title, List<String> values, LinkPlatform p) async {
+      if (values.length == 1) return values.first;
+      return showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        isScrollControlled: true,
+        builder: (sheet) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .6),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600))),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (final v in values)
+                    ListTile(
+                      leading: PlatformIcon(p, size: 24),
+                      title: Text(v),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => Navigator.pop(sheet, v),
+                    ),
+                  const SizedBox(height: 8),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+      );
+    }
 
     Widget section(String title, List<Widget> kids) => Container(
           width: double.infinity,
@@ -89,42 +117,55 @@ class EventDetailScreen extends StatelessWidget {
             Text(daysLabel(d), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w300, color: cs.onPrimaryContainer)),
           ]),
         ),
-        if (e.phone.isNotEmpty) ...[
+        if (phones.isNotEmpty) ...[
           const SizedBox(height: 14),
           Row(children: [
             Expanded(
               child: FilledButton.tonalIcon(
-                  onPressed: () => openUri(Uri(scheme: 'tel', path: e.phone)),
+                  onPressed: () async {
+                    final v = await chooseValue('Call', phones, platformOf('phone'));
+                    if (v != null) openUri(Uri(scheme: 'tel', path: v));
+                  },
                   icon: const Icon(Icons.call_outlined),
                   label: const Text('Call')),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.tonalIcon(
-                  onPressed: () => openUri(Uri(scheme: 'sms', path: e.phone)),
+                  onPressed: () async {
+                    final v = await chooseValue('Message', phones, platformOf('phone'));
+                    if (v != null) openUri(Uri(scheme: 'sms', path: v));
+                  },
                   icon: const Icon(Icons.sms_outlined),
                   label: const Text('Message')),
             ),
           ]),
         ],
-        if (e.category.isNotEmpty || e.location.isNotEmpty || e.phone.isNotEmpty || e.whatsapp.isNotEmpty)
+        if (e.category.isNotEmpty || e.location.isNotEmpty || phones.isNotEmpty || e.valuesOf('whatsapp').isNotEmpty)
           section('Details', [
             if (e.category.isNotEmpty) row(Icons.label_outline_rounded, e.category),
             if (e.location.isNotEmpty) row(Icons.place_outlined, e.location),
-            if (e.phone.isNotEmpty) row(Icons.phone_outlined, e.phone),
-            if (e.whatsapp.isNotEmpty) row(Icons.chat_bubble_outline_rounded, e.whatsapp),
+            for (final v in phones) row(Icons.phone_outlined, v),
+            for (final v in e.valuesOf('whatsapp')) row(Icons.chat_bubble_outline_rounded, v),
           ]),
-        if (e.social.isNotEmpty || e.whatsapp.isNotEmpty)
+        if (e.links.any((l) => l.key != 'phone' && l.value.isNotEmpty))
           section('Social & links', [
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final p in linkPlatforms)
-                if (p.key != 'phone' && linkValue(p.key).isNotEmpty)
-                  ActionChip(
-                    avatar: PlatformIcon(p, size: 18),
-                    label: Text(p.label),
-                    onPressed: () => openUri(linkUri(p.key, linkValue(p.key))),
-                  ),
-            ]),
+            LayoutBuilder(builder: (context, box) {
+              final w = (box.maxWidth - 16) / 3; // three equal tiles per row
+              return Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final p in linkPlatforms)
+                  if (p.key != 'phone' && e.valuesOf(p.key).isNotEmpty)
+                    _LinkTile(
+                      width: w,
+                      platform: p,
+                      count: e.valuesOf(p.key).length,
+                      onTap: () async {
+                        final v = await chooseValue(p.label, e.valuesOf(p.key), p);
+                        if (v != null) openUri(linkUri(p.key, v));
+                      },
+                    ),
+              ]);
+            }),
           ]),
         section('Reminders', [
           if (e.reminders.isEmpty) Text('No reminders set', style: TextStyle(color: cs.onSurfaceVariant)),
@@ -140,6 +181,48 @@ class EventDetailScreen extends StatelessWidget {
         ]),
         if (e.notes.isNotEmpty) section('Notes', [Text(e.notes)]),
       ]),
+    );
+  }
+}
+
+class _LinkTile extends StatelessWidget {
+  const _LinkTile({required this.width, required this.platform, required this.count, required this.onTap});
+  final double width;
+  final LinkPlatform platform;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: width,
+      height: 50,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: .5)),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            PlatformIcon(platform, size: 20),
+            const SizedBox(width: 8),
+            Flexible(child: Text(platform.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+            if (count > 1) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8)),
+                child: Text('$count', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onPrimaryContainer)),
+              ),
+            ],
+          ]),
+        ),
+      ),
     );
   }
 }

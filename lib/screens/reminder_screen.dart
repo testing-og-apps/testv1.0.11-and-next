@@ -50,6 +50,29 @@ class ReminderScreen extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
               child: Column(children: [
+                Expanded(
+                  child: Center(
+                    child: SingleChildScrollView(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.alarm_rounded, size: 30, color: cs.primary),
+                        const SizedBox(height: 18),
+                        Avatar(name: e.name, path: photo, radius: 76),
+                        const SizedBox(height: 22),
+                        Text(e.name,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 34, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                        const SizedBox(height: 6),
+                        Text(e.subtitleOn(e.next), textAlign: TextAlign.center, style: TextStyle(fontSize: 18, color: cs.onSurfaceVariant)),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                          decoration: BoxDecoration(color: cs.primary.withValues(alpha: .15), borderRadius: BorderRadius.circular(20)),
+                          child: Text(daysLabel(d), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: cs.primary)),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(

@@ -355,7 +355,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
             ),
           ]),
-          Center(child: Text('Annua 1.0.11 · ${s.events.length} events', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))),
+          Center(child: Text('Annua 1.0.12 · ${s.events.length} events', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))),
         ]),
         if (_busy) const LinearProgressIndicator(minHeight: 2),
       ]),
