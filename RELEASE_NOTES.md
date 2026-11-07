@@ -1,0 +1,3 @@
+- Sturdier release builds: every version is now signed with the same key, so updates install over the old one
+- New "App update" in Settings: see what's new and update when you want
+- Zeroex logo on the start screen now matches the colours

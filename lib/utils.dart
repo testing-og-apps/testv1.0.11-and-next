@@ -125,3 +125,9 @@ Future<void> openUri(Uri u) async {
   } catch (_) {}
   toast('Could not open link');
 }
+
+/// Keep in sync with `version:` in pubspec.yaml.
+const kAppVersion = '1.0.14';
+
+/// GitHub repository whose latest Release is checked for updates (Settings → App update).
+const kUpdateRepo = 'testing-og-apps/Anu-make';

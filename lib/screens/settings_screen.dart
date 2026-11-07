@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/event.dart';
 import '../providers/app_state.dart';
+import '../services/updater.dart';
 import '../theme.dart';
 import '../utils.dart';
 
@@ -20,6 +21,81 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
+  UpdateInfo? _update;
+  bool _checking = true, _updateError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUpdate();
+  }
+
+  Future<void> _checkUpdate() async {
+    setState(() {
+      _checking = true;
+      _updateError = false;
+    });
+    try {
+      final u = await Updater.check();
+      if (!mounted) return;
+      setState(() {
+        _update = u;
+        _checking = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        _updateError = true;
+      });
+    }
+  }
+
+  String _cleanNotes(String raw) {
+    if (raw.trim().isEmpty) return 'Bug fixes and improvements.';
+    return raw
+        .split('\n')
+        .map((l) => l.replaceAll(RegExp(r'^#+\s*'), '').replaceAll('**', '').replaceAll('`', '').replaceFirstMapped(RegExp(r'^\s*[-*]\s+'), (_) => '• '))
+        .join('\n')
+        .trim();
+  }
+
+  void _showUpdate(UpdateInfo u) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheet) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * .75),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Version ${u.version}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text("What's new", style: TextStyle(color: Theme.of(sheet).colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              Flexible(child: SingleChildScrollView(child: Text(_cleanNotes(u.notes), style: const TextStyle(fontSize: 15, height: 1.5)))),
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(sheet), child: const Text('Not now'))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: () {
+                      Navigator.pop(sheet);
+                      openUri(Uri.parse(u.url));
+                    },
+                    child: const Text('Update'),
+                  ),
+                ),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _run(Future<void> Function() job, {String? ok}) async {
     setState(() => _busy = true);
@@ -316,6 +392,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _pickSound(s, e.$1, e.$2),
               ),
           ]),
+          // ── App update ──
+          section('App update', [
+            ListTile(
+              leading: _checking
+                  ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.4))
+                  : Icon(
+                      _updateError
+                          ? Icons.cloud_off_outlined
+                          : _update != null
+                              ? Icons.system_update_rounded
+                              : Icons.verified_outlined,
+                      color: _update != null ? cs.primary : null),
+              title: Text(_update != null ? 'Version ${_update!.version} is available' : 'Annua v$kAppVersion'),
+              subtitle: Text(_checking
+                  ? 'Checking for updates…'
+                  : _updateError
+                      ? 'Couldn\u2019t check \u00b7 tap to retry'
+                      : _update != null
+                          ? "Tap to see what's new"
+                          : 'You\u2019re up to date'),
+              trailing: _update != null ? const Icon(Icons.chevron_right_rounded) : null,
+              onTap: _checking ? null : (_update != null ? () => _showUpdate(_update!) : _checkUpdate),
+            ),
+          ]),
           // ── About the developer ──
           section('About developer', [
             Padding(
@@ -354,7 +454,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
             ),
           ]),
-          Center(child: Text('Annua 1.0.13 · ${s.events.length} events', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))),
+          Center(child: Text('Annua $kAppVersion · ${s.events.length} events', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))),
         ]),
         if (_busy) const LinearProgressIndicator(minHeight: 2),
       ]),

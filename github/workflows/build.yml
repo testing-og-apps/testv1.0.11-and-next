@@ -1,14 +1,16 @@
 name: Build Flutter APK
 
+# Runs only when you push a version tag (e.g. v1.0.15) or press "Run workflow" by hand.
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create the GitHub Release
 
     steps:
     - uses: actions/checkout@v3
@@ -43,7 +45,7 @@ jobs:
         m = 'android/app/src/main/AndroidManifest.xml'
         s = open(m).read()
         perms = ''.join(f'<uses-permission android:name="android.permission.{p}"/>' for p in
-          ['POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','VIBRATE','WAKE_LOCK','USE_EXACT_ALARM','USE_FULL_SCREEN_INTENT','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'])
+          ['POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','VIBRATE','WAKE_LOCK','USE_EXACT_ALARM','USE_FULL_SCREEN_INTENT','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS','INTERNET'])
         perms += '<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32"/>'
         perms += '<queries>' + ''.join(f'<intent><action android:name="android.intent.action.VIEW"/><data android:scheme="{x}"/></intent>' for x in ['https','tel','sms']) + '</queries>'
         recv = '''<receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
@@ -71,6 +73,62 @@ jobs:
         open(g, 'w').write(t)
         EOF
 
+    - name: Set up release signing
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      run: |
+        if [ -z "$KEYSTORE_BASE64" ]; then
+          echo "No keystore secret found - building with the temporary debug key (updates will not install over other builds)"
+          exit 0
+        fi
+        KEY_PASSWORD="${KEY_PASSWORD:-$STORE_PASSWORD}"
+        echo "$KEYSTORE_BASE64" | base64 -d > android/app/annua.jks
+        printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=annua.jks\n' "$STORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+        python3 - <<'PY'
+        import glob
+        g = glob.glob('android/app/build.gradle*')[0]
+        t = open(g).read()
+        if g.endswith('.kts'):
+            block = '''    signingConfigs {
+            create("release") {
+                val props = java.util.Properties()
+                props.load(java.io.FileInputStream(rootProject.file("key.properties")))
+                keyAlias = props["keyAlias"] as String
+                keyPassword = props["keyPassword"] as String
+                storeFile = file(props["storeFile"] as String)
+                storePassword = props["storePassword"] as String
+            }
+        }
+
+        '''
+            t = t.replace('buildTypes {', block + 'buildTypes {', 1)
+            t = t.replace('signingConfigs.getByName("debug")', 'signingConfigs.getByName("release")')
+            ok = 'signingConfigs.getByName("release")' in t
+        else:
+            block = '''    signingConfigs {
+            release {
+                def props = new Properties()
+                props.load(new FileInputStream(rootProject.file("key.properties")))
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+                storeFile file(props['storeFile'])
+                storePassword props['storePassword']
+            }
+        }
+
+        '''
+            t = t.replace('buildTypes {', block + 'buildTypes {', 1)
+            t = t.replace('signingConfigs.debug', 'signingConfigs.release')
+            ok = 'signingConfigs.release' in t
+        if not ok:
+            raise SystemExit('Could not switch the release build to the real signing key')
+        open(g, 'w').write(t)
+        print('Release signing enabled')
+        PY
+
     - name: Relax Kotlin JVM target check
       run: echo "kotlin.jvm.target.validation.mode=IGNORE" >> android/gradle.properties
 
@@ -87,8 +145,19 @@ jobs:
     - name: Build APK
       run: flutter build apk --release
 
+    - name: Name the APK
+      run: cp build/app/outputs/flutter-apk/app-release.apk Annua.apk
+
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: release-apk
-        path: build/app/outputs/flutter-apk/app-release.apk
+        path: Annua.apk
+
+    - name: Publish GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: Annua.apk
+        name: Annua ${{ github.ref_name }}
+        body_path: RELEASE_NOTES.md

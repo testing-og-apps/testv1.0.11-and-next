@@ -46,7 +46,7 @@ class SplashScreen extends StatelessWidget {
               Text('From', style: TextStyle(fontSize: 12, letterSpacing: 1.5, color: gold.withValues(alpha: .7))),
               const SizedBox(height: 2),
               Row(mainAxisSize: MainAxisSize.min, children: [
-                SvgPicture.asset('assets/brands/zeroex.svg', height: 26),
+                SvgPicture.asset('assets/brands/zeroex.svg', height: 26, colorFilter: const ColorFilter.mode(gold, BlendMode.srcIn)),
                 const SizedBox(width: 8),
                 const Text('Zeroex', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: 2, color: gold)),
               ]),
