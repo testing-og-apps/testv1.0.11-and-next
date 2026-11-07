@@ -94,8 +94,8 @@ jobs:
         if g.endswith('.kts'):
             block = '''    signingConfigs {
             create("release") {
-                val props = java.util.Properties()
-                props.load(java.io.FileInputStream(rootProject.file("key.properties")))
+                val props = Properties()
+                props.load(FileInputStream(rootProject.file("key.properties")))
                 keyAlias = props["keyAlias"] as String
                 keyPassword = props["keyPassword"] as String
                 storeFile = file(props["storeFile"] as String)
@@ -105,6 +105,8 @@ jobs:
 
         '''
             t = t.replace('buildTypes {', block + 'buildTypes {', 1)
+            # inside android { } the name "java" means the Java extension, so import the classes at the top
+            t = 'import java.io.FileInputStream\nimport java.util.Properties\n\n' + t
             t = t.replace('signingConfigs.getByName("debug")', 'signingConfigs.getByName("release")')
             ok = 'signingConfigs.getByName("release")' in t
         else:
