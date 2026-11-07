@@ -1,3 +1,1 @@
-- Sturdier release builds: every version is now signed with the same key, so updates install over the old one
-- New "App update" in Settings: see what's new and update when you want
-- Zeroex logo on the start screen now matches the colours
+- The app now starts in Light theme by default (you can still switch to Auto or Dark in Settings → Appearance)

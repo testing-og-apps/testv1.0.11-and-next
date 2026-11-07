@@ -127,7 +127,7 @@ Future<void> openUri(Uri u) async {
 }
 
 /// Keep in sync with `version:` in pubspec.yaml.
-const kAppVersion = '1.0.14';
+const kAppVersion = '1.0.15';
 
 /// GitHub repository whose latest Release is checked for updates (Settings → App update).
 const kUpdateRepo = 'testing-og-apps/Anu-make';

@@ -15,7 +15,7 @@ class AppState extends ChangeNotifier {
   late SharedPreferences _prefs;
 
   List<AnnuaEvent> events = [];
-  ThemeMode themeMode = ThemeMode.system;
+  ThemeMode themeMode = ThemeMode.light;
   int accent = 0xFFF59E0B;
   bool useDynamic = false;
   bool pureBlack = false;
@@ -24,7 +24,7 @@ class AppState extends ChangeNotifier {
     _prefs = await SharedPreferences.getInstance();
     await storage.init();
     backup = BackupService(storage);
-    themeMode = ThemeMode.values[_prefs.getInt('themeMode') ?? ThemeMode.system.index];
+    themeMode = ThemeMode.values[_prefs.getInt('themeMode') ?? ThemeMode.light.index];
     accent = _prefs.getInt('accent') ?? accent;
     useDynamic = _prefs.getBool('useDynamic') ?? false;
     pureBlack = _prefs.getBool('pureBlack') ?? false;
