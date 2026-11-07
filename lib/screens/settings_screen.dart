@@ -321,7 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
               child: Row(children: [
-                SvgPicture.asset('assets/brands/zeroex.svg', height: 34),
+                SvgPicture.asset('assets/brands/zeroex.svg', height: 34, colorFilter: ColorFilter.mode(cs.onSurface, BlendMode.srcIn)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -334,7 +334,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ListTile(
               leading: const Icon(Icons.language_rounded),
               title: const Text('Website'),
-              subtitle: const Text('zeroex-0x.github.io'),
               trailing: const Icon(Icons.open_in_new_rounded, size: 18),
               onTap: () => openUri(Uri.parse('https://zeroex-0x.github.io/')),
             ),
@@ -355,7 +354,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ]),
             ),
           ]),
-          Center(child: Text('Annua 1.0.12 · ${s.events.length} events', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))),
+          Center(child: Text('Annua 1.0.13 · ${s.events.length} events', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))),
         ]),
         if (_busy) const LinearProgressIndicator(minHeight: 2),
       ]),

@@ -201,7 +201,7 @@ class Notifications {
 
   NotificationDetails _details(AlertStyle s, {required String title, required String body, String? photo, EventType type = EventType.birthday}) {
     final vib = Int64List.fromList([0, 500, 250, 500, 250, 800]);
-    final style = BigTextStyleInformation(body, contentTitle: title, summaryText: 'Annua');
+    final style = BigTextStyleInformation(body, contentTitle: title);
     final large = (photo != null && File(photo).existsSync()) ? FilePathAndroidBitmap(photo) : null;
     final AndroidNotificationDetails android;
     if (s == AlertStyle.alarm) {

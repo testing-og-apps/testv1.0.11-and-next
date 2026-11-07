@@ -141,12 +141,32 @@ class EventDetailScreen extends StatelessWidget {
             ),
           ]),
         ],
-        if (e.category.isNotEmpty || e.location.isNotEmpty || phones.isNotEmpty || e.valuesOf('whatsapp').isNotEmpty)
+        if (e.category.isNotEmpty || e.location.isNotEmpty || phones.isNotEmpty)
           section('Details', [
             if (e.category.isNotEmpty) row(Icons.label_outline_rounded, e.category),
             if (e.location.isNotEmpty) row(Icons.place_outlined, e.location),
-            for (final v in phones) row(Icons.phone_outlined, v),
-            for (final v in e.valuesOf('whatsapp')) row(Icons.chat_bubble_outline_rounded, v),
+            if (phones.isNotEmpty)
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () async {
+                  final v = await chooseValue('Phone numbers', phones, platformOf('phone'));
+                  if (v != null) openUri(Uri(scheme: 'tel', path: v));
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(children: [
+                    Icon(Icons.phone_outlined, size: 18, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(phones.first)),
+                    if (phones.length > 1)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
+                        child: Text('+${phones.length - 1} more', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onPrimaryContainer)),
+                      ),
+                  ]),
+                ),
+              ),
           ]),
         if (e.links.any((l) => l.key != 'phone' && l.value.isNotEmpty))
           section('Social & links', [
@@ -197,32 +217,40 @@ class _LinkTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return SizedBox(
       width: width,
-      height: 50,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHigh,
+      height: 68,
+      child: Stack(children: [
+        Positioned.fill(
+          child: InkWell(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: .5)),
-          ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            PlatformIcon(platform, size: 20),
-            const SizedBox(width: 8),
-            Flexible(child: Text(platform.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-            if (count > 1) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(8)),
-                child: Text('$count', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onPrimaryContainer)),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: cs.outlineVariant.withValues(alpha: .5)),
               ),
-            ],
-          ]),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                PlatformIcon(platform, size: 24),
+                const SizedBox(height: 6),
+                Text(platform.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+              ]),
+            ),
+          ),
         ),
-      ),
+        if (count > 1)
+          Positioned(
+            top: 4,
+            right: 6,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(9)),
+              child: Text('$count', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.onPrimary)),
+            ),
+          ),
+      ]),
     );
   }
 }
